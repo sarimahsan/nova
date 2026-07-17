@@ -1,0 +1,37 @@
+# Python Cache Files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Environments and Virtualenvs
+.venv/
+venv/
+ENV/
+.env
+
+# Model Checkpoints and Weights
+*.pt
+*.pth
+*.ckpt
+*.bin
+*.safetensors
+
+# Datasets and Local Cache
+dataset_cache/
+temp_cache/
+
+# Training Outputs and Test Results
+results/
+test_output/
+
+# IDE Configuration
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db

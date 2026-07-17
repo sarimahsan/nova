@@ -1,0 +1,38 @@
+# Model — 295M parameters
+hidden_dim: 1024
+num_layers: 16
+num_heads: 16
+num_kv_heads: 4
+max_seq_len: 512
+vocab_size: 50257
+ffn_dim: 4096
+tie_word_embeddings: true
+norm_type: rmsnorm
+activation_type: swiglu
+qk_norm: true
+use_rope: true
+dropout: 0.0
+
+# Training
+lr: 6.0e-4
+min_lr: 6.0e-5
+weight_decay: 0.01
+warmup_steps: 500
+batch_size: 48
+gradient_accumulation_steps: 4
+epochs: 3
+val_interval: 500
+clip_grad: 1.0
+precision: bf16
+
+# Data
+dataset_name: roneneldan/TinyStories
+dataset_config: null
+tokenizer_name: gpt2
+max_samples: 500000
+val_max_samples: 5000
+
+# System
+seed: 42
+early_stopping_patience: 5
+output_dir: results
