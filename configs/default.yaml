@@ -18,8 +18,8 @@ lr: 6.0e-4
 min_lr: 6.0e-5
 weight_decay: 0.01
 warmup_steps: 500
-batch_size: 48
-gradient_accumulation_steps: 4
+batch_size: 16
+gradient_accumulation_steps: 12
 epochs: 3
 val_interval: 500
 clip_grad: 1.0
