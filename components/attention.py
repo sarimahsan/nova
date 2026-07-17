@@ -69,16 +69,8 @@ class GroupedQueryAttention(nn.Module):
         k_rep = repeat_kv(k, self.n_rep)
         v_rep = repeat_kv(v, self.n_rep)
 
-        # Compute Attention Entropy in a detached/no_grad path on the side
-        with torch.no_grad():
-            # attn_scores: (b, h, s, s)
-            attn_scores = torch.matmul(q, k_rep.transpose(-2, -1)) / math.sqrt(self.head_dim)
-            mask = torch.triu(torch.full((s, s), float('-inf'), device=q.device), diagonal=1)
-            attn_scores = attn_scores + mask
-            attn_probs = F.softmax(attn_scores, dim=-1)
-            attn_probs = torch.nan_to_num(attn_probs, 0.0)
-            entropy = -torch.sum(attn_probs * torch.log(attn_probs + 1e-9), dim=-1)
-            self.last_attn_entropy = entropy.mean().item()
+        # Attention entropy calculation is disabled to prevent OutOfMemory (OOM) errors on large batch sizes
+        self.last_attn_entropy = 0.0
 
         # PyTorch native optimized causal SDPA
         out = F.scaled_dot_product_attention(

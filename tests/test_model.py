@@ -319,3 +319,43 @@ def test_gradient_accumulation():
     
     for p1, p2 in zip(model1.parameters(), model2.parameters()):
         assert torch.allclose(p1, p2, atol=1e-5)
+
+def test_trainer_dataparallel():
+    if torch.cuda.is_available() and torch.cuda.device_count() > 1:
+        from utils.config import ModelConfig
+        from models.transformer import TransformerLM
+        from trainer.trainer import Trainer
+        from torch.utils.data import TensorDataset, DataLoader
+        
+        config = ModelConfig(
+            vocab_size=10,
+            hidden_dim=16,
+            num_layers=1,
+            num_heads=2,
+            num_kv_heads=1,
+            epochs=1,
+            val_interval=2,
+            gradient_accumulation_steps=1
+        )
+        model = TransformerLM(config)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+        
+        x = torch.randint(0, 10, (8, 4))
+        y = torch.randint(0, 10, (8, 4))
+        dataset = TensorDataset(x, y)
+        loader = DataLoader(dataset, batch_size=4)
+        
+        trainer = Trainer(
+            model=model,
+            optimizer=optimizer,
+            train_loader=loader,
+            val_loader=loader,
+            config=config,
+            callbacks=[]
+        )
+        
+        assert isinstance(trainer.model, nn.DataParallel)
+        
+        trainer.train()
+        assert trainer.global_step > 0
+
