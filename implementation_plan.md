@@ -1,6 +1,6 @@
-# Modern Transformer from Scratch — Kaggle 2×T4 Training (~295M params)
+# Modern Transformer from Scratch — Kaggle 2×T4 Training (~141M params)
 
-Build a complete, self-contained ~295M parameter transformer language model from scratch with modern architecture choices (SwiGLU, RMSNorm, RoPE, GQA), train on TinyStories via HuggingFace, produce training plots, and pass pytest — all ready to `git push` → `git pull` on Kaggle and run.
+Build a complete, self-contained ~141M parameter transformer language model from scratch with modern architecture choices (SwiGLU, RMSNorm, RoPE, GQA), train on TinyStories via HuggingFace, produce training plots, and pass pytest — all ready to `git push` → `git pull` on Kaggle and run.
 
 ## Context
 
@@ -12,7 +12,7 @@ You have an existing research framework at `e:\transformer` (package name `trans
 > **Dataset**: Using **TinyStories** (`roneneldan/TinyStories`) — 500K samples, clean English text, trains well at this scale, produces readable output for qualitative evaluation.
 
 > [!IMPORTANT]
-> **Model Scale**: Targeting **~295M parameters** — `hidden_dim=1024`, 16 layers, 16 heads (GQA with 4 KV heads), `ffn_dim=4096`, `seq_len=512`. Memory-safe on 2×T4 (32GB total) with bf16. Estimated training: **~6 hours** for 3 epochs on 500K samples.
+> **Model Scale**: Targeting **~141M parameters** — `hidden_dim=768`, 12 layers, 12 heads (GQA with 3 KV heads), `ffn_dim=3072`, `seq_len=512`. Memory-safe on 2×T4 (32GB total) with bf16. Estimated training: **~3 hours** for 3 epochs on 500K samples.
 
 > [!WARNING]
 > **Multi-GPU Strategy**: Using `nn.DataParallel` for simplicity — wraps the model transparently, no launch script changes. GPU 0 memory: ~8.4GB/16GB, GPU 1: ~5.4GB/16GB. If you prefer DDP (better scaling), let me know.
@@ -27,39 +27,39 @@ You have an existing research framework at `e:\transformer` (package name `trans
 
 ---
 
-## Model Architecture — 295M Parameters
+## Model Architecture — 141M Parameters
 
 | Parameter | Value | Rationale |
 |-----------|-------|-----------|
-| `hidden_dim` | 1024 | Fills T4 tensor cores efficiently |
-| `num_layers` | 16 | Deep enough for strong language modeling |
-| `num_heads` | 16 | 64-dim heads (optimal for RoPE) |
-| `num_kv_heads` | 4 | 4:1 GQA ratio — saves 40% KV memory |
+| `hidden_dim` | 768 | Fills T4 tensor cores efficiently |
+| `num_layers` | 12 | Deep enough for strong language modeling |
+| `num_heads` | 12 | 64-dim heads (optimal for RoPE) |
+| `num_kv_heads` | 3 | 4:1 GQA ratio — saves 40% KV memory |
 | `head_dim` | 64 | Standard, SDPA-optimized |
-| `ffn_dim` | 4096 | 4× hidden_dim (SwiGLU standard) |
+| `ffn_dim` | 3072 | 4× hidden_dim (SwiGLU standard) |
 | `max_seq_len` | 512 | Good context, fits in memory |
 | `vocab_size` | 50257 | GPT-2 tokenizer |
-| `batch_size` | 48 | 24 per GPU with DataParallel |
+| `batch_size` | 16 | Memory-safe, accumulation handles gradient steps |
 | `precision` | bf16 | Native on T4, no GradScaler needed |
-| **Total params** | **~295M** | |
+| **Total params** | **~141M** | |
 
 ### Memory Budget (DataParallel + bf16)
 
 | Component | GPU 0 | GPU 1 |
 |-----------|-------|-------|
-| Model params (bf16) | 590 MB | 590 MB |
-| Optimizer states (fp32) | 2.4 GB | — |
-| Gradients (bf16) | 590 MB | 590 MB |
-| Activations (batch=24/gpu) | ~4.8 GB | ~4.8 GB |
-| **Total** | **~8.4 GB / 16 GB** ✅ | **~6.0 GB / 16 GB** ✅ |
+| Model params (bf16) | 282 MB | 282 MB |
+| Optimizer states (fp32) | 1.13 GB | — |
+| Gradients (bf16) | 282 MB | 282 MB |
+| Activations (batch=8/gpu) | ~1.6 GB | ~1.6 GB |
+| **Total** | **~3.3 GB / 16 GB** ✅ | **~2.2 GB / 16 GB** ✅ |
 
 ### Training Time Estimate
 
 ```
 500K samples × 512 tokens × 3 epochs = 768M training tokens
-FLOPs ≈ 6 × 295M × 768M = 1.36 × 10¹⁸
+FLOPs ≈ 6 × 141M × 768M = 6.50 × 10¹⁷
 2×T4 effective throughput ≈ 65 TFLOPS
-Time ≈ 1.36e18 / 65e12 ≈ 20,900 seconds ≈ 5.8 hours
+Time ≈ 6.50e17 / 65e12 ≈ 10,000 seconds ≈ 2.8 hours
 ```
 
 ---
@@ -145,12 +145,12 @@ e:\mistral/
 
 #### [NEW] [transformer.py](file:///e:/mistral/models/transformer.py)
 - `TransformerLM` class — full causal LM:
-  - `nn.Embedding` → 16 × `TransformerBlock` → `RMSNorm` → `nn.Linear` (lm_head)
+  - `nn.Embedding` → 12 × `TransformerBlock` → `RMSNorm` → `nn.Linear` (lm_head)
   - Tied word embeddings (lm_head shares weights with embedding)
   - Dynamic RoPE cache per forward pass
   - Weight init: normal (std=0.02) with residual scaling `1/√(2×num_layers)` for output projections
 - Clean `__init__` using a dataclass config
-- Adapted from [mini_qwen.py](file:///e:/transformer/models/mini_qwen.py) scaled up to 295M
+- Adapted from [mini_qwen.py](file:///e:/transformer/models/mini_qwen.py) scaled to 141M
 
 ---
 
@@ -234,14 +234,14 @@ Single-file entrypoint:
 
 #### [NEW] [default.yaml](file:///e:/mistral/configs/default.yaml)
 ```yaml
-# Model — 295M parameters
-hidden_dim: 1024
-num_layers: 16
-num_heads: 16
-num_kv_heads: 4
+# Model — 141M parameters
+hidden_dim: 768
+num_layers: 12
+num_heads: 12
+num_kv_heads: 3
 max_seq_len: 512
 vocab_size: 50257
-ffn_dim: 4096
+ffn_dim: 3072
 tie_word_embeddings: true
 norm_type: rmsnorm
 activation_type: swiglu

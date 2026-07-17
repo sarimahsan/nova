@@ -4,13 +4,13 @@ from dataclasses import dataclass, field
 @dataclass
 class ModelConfig:
     # Model architecture
-    hidden_dim: int = 1024
-    num_layers: int = 16
-    num_heads: int = 16
-    num_kv_heads: int = 4
+    hidden_dim: int = 768
+    num_layers: int = 12
+    num_heads: int = 12
+    num_kv_heads: int = 3
     max_seq_len: int = 512
     vocab_size: int = 50257
-    ffn_dim: int = 4096
+    ffn_dim: int = 3072
     tie_word_embeddings: bool = True
     norm_type: str = "rmsnorm"
     activation_type: str = "swiglu"

@@ -259,7 +259,7 @@ def test_seed_reproducibility():
     from models.transformer import TransformerLM
     from utils.seed import set_seed
     
-    config = ModelConfig(vocab_size=100, hidden_dim=32, num_layers=2)
+    config = ModelConfig(vocab_size=100, hidden_dim=32, num_layers=2, num_heads=4, num_kv_heads=2)
     
     set_seed(42)
     model1 = TransformerLM(config)
@@ -275,7 +275,7 @@ def test_seed_reproducibility():
 def test_mixed_precision_forward():
     from utils.config import ModelConfig
     from models.transformer import TransformerLM
-    config = ModelConfig(vocab_size=100, hidden_dim=32, num_layers=2)
+    config = ModelConfig(vocab_size=100, hidden_dim=32, num_layers=2, num_heads=4, num_kv_heads=2)
     model = TransformerLM(config)
     x = torch.randint(0, 100, (2, 8))
     

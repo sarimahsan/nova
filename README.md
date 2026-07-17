@@ -1,4 +1,4 @@
-# Nova: Modern Transformer from Scratch (~295M parameters)
+# Nova: Modern Transformer from Scratch (~141M parameters)
 
 A complete, self-contained implementation of a modern transformer language model built from scratch using PyTorch. Nova features:
 * **RMSNorm** and **LayerNorm** (implemented from scratch)
@@ -68,7 +68,7 @@ graph TD
 │   ├── test_environment.py # Smoke tests for packages and hardware
 │   └── test_model.py       # Comprehensive unit tests for model layers
 ├── configs/
-│   └── default.yaml        # ~295M parameter model default configuration
+│   └── default.yaml        # ~141M parameter model default configuration
 ├── train.py                # Single training entrypoint
 └── requirements.txt        # Package dependencies
 ```
