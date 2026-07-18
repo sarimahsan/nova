@@ -87,12 +87,29 @@ def main():
 
     # 7. Setup optimizer
     use_fused = (torch.cuda.is_available() and config.precision != "fp32")
-    print(f"Setting up AdamW optimizer (fused={use_fused})...")
+    
+    # Separate parameters into decay and no_decay groups to stabilize training
+    decay_params = []
+    no_decay_params = []
+    for name, param in model.named_parameters():
+        if not param.requires_grad:
+            continue
+        # Biases and 1D parameters (like LayerNorm/RMSNorm scale weights) should not be decayed
+        if param.ndim < 2 or name.endswith(".bias"):
+            no_decay_params.append(param)
+        else:
+            decay_params.append(param)
+            
+    optim_groups = [
+        {"params": decay_params, "weight_decay": config.weight_decay},
+        {"params": no_decay_params, "weight_decay": 0.0}
+    ]
+    
+    print(f"Setting up AdamW optimizer (fused={use_fused}) with {len(decay_params)} decayed and {len(no_decay_params)} non-decayed parameters...")
     optimizer = torch.optim.AdamW(
-        model.parameters(),
+        optim_groups,
         lr=config.lr,
         betas=(0.9, 0.95),
-        weight_decay=config.weight_decay,
         fused=use_fused
     )
 
@@ -127,6 +144,77 @@ def main():
         print(f"Perplexity: {math.exp(min(trainer.last_val_loss, 100)):.2f}")
     print(f"Results and plots saved to: {config.output_dir}")
     print(f"==========================================")
+
+    # 11. Post-training: load best model and export to HF format
+    print("\nPreparing model and metrics for deployment...")
+    
+    # Paths for output folders
+    hf_model_dir = os.path.join(config.output_dir, "model")
+    metrics_dir = os.path.join(config.output_dir, "metrics")
+    os.makedirs(hf_model_dir, exist_ok=True)
+    os.makedirs(metrics_dir, exist_ok=True)
+    
+    # Load best checkpoint if it exists, otherwise use the current weights in memory
+    best_checkpoint_path = os.path.join(config.output_dir, "checkpoint.pt")
+    if os.path.exists(best_checkpoint_path):
+        print(f"Loading best checkpoint from '{best_checkpoint_path}'...")
+        checkpoint = torch.load(best_checkpoint_path, map_location="cpu")
+        # Load weights into raw_model (unwrapped from DataParallel if necessary)
+        raw_model = model.module if hasattr(model, "module") else model
+        state_dict = checkpoint["model_state_dict"]
+        # Strip DataParallel prefix if present
+        from collections import OrderedDict
+        clean_state_dict = OrderedDict()
+        for k, v in state_dict.items():
+            name = k[7:] if k.startswith("module.") else k
+            clean_state_dict[name] = v
+        raw_model.load_state_dict(clean_state_dict)
+    else:
+        print("No checkpoint file found. Exporting the final weights in memory.")
+
+    # Save to Safetensors format
+    raw_model = model.module if hasattr(model, "module") else model
+    try:
+        from safetensors.torch import save_file
+        safetensors_path = os.path.join(hf_model_dir, "model.safetensors")
+        save_file(raw_model.state_dict(), safetensors_path)
+        print(f"Saved model weights to Safetensors format at: '{safetensors_path}'")
+    except ImportError:
+        print("safetensors package is not installed. Saving standard PyTorch model.bin instead...")
+        bin_path = os.path.join(hf_model_dir, "model.bin")
+        torch.save(raw_model.state_dict(), bin_path)
+        print(f"Saved model weights to standard PyTorch format at: '{bin_path}'")
+
+    # Save config.json
+    import json
+    from dataclasses import asdict
+    config_json_path = os.path.join(hf_model_dir, "config.json")
+    with open(config_json_path, "w") as f:
+        json.dump(asdict(config), f, indent=2)
+    print(f"Saved configuration to: '{config_json_path}'")
+
+    # Save tokenizer files
+    tokenizer.save_pretrained(hf_model_dir)
+    print(f"Saved tokenizer files to: '{hf_model_dir}'")
+
+    # 12. Organize metric files (CSVs, JSON logs, dashboard plots)
+    metrics_files = [
+        "metrics.csv", 
+        "history.json", 
+        "training_dashboard.png", 
+        "model_statistics.json", 
+        "loss_curve.png", 
+        "learning_rate.png"
+    ]
+    import shutil
+    moved_count = 0
+    for fname in metrics_files:
+        src_path = os.path.join(config.output_dir, fname)
+        if os.path.exists(src_path):
+            shutil.move(src_path, os.path.join(metrics_dir, fname))
+            moved_count += 1
+            
+    print(f"Moved {moved_count} CSV/metrics/plot files to: '{metrics_dir}'")
 
 if __name__ == "__main__":
     main()

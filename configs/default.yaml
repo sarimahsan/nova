@@ -14,12 +14,12 @@ use_rope: true
 dropout: 0.0
 
 # Training
-lr: 2.5e-4
-min_lr: 2.5e-5
+lr: 1.5e-4
+min_lr: 1.5e-5
 weight_decay: 0.1
-warmup_steps: 500
+warmup_steps: 1000
 batch_size: 16
-gradient_accumulation_steps: 12
+gradient_accumulation_steps: 32
 epochs: 3
 val_interval: 500
 clip_grad: 1.0
