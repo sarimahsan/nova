@@ -91,6 +91,7 @@ def main():
     optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=config.lr,
+        betas=(0.9, 0.95),
         weight_decay=config.weight_decay,
         fused=use_fused
     )

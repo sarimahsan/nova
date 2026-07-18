@@ -14,9 +14,9 @@ use_rope: true
 dropout: 0.0
 
 # Training
-lr: 6.0e-4
-min_lr: 6.0e-5
-weight_decay: 0.01
+lr: 2.5e-4
+min_lr: 2.5e-5
+weight_decay: 0.1
 warmup_steps: 500
 batch_size: 16
 gradient_accumulation_steps: 12
