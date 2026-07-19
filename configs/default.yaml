@@ -14,8 +14,8 @@ use_rope: true
 dropout: 0.1
 
 # Training
-lr: 1e-4
-min_lr: 1e-5
+lr: 1.0e-4
+min_lr: 1.0e-5
 weight_decay: 0.1
 warmup_steps: 1000
 batch_size: 16
