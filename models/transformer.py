@@ -35,6 +35,7 @@ class TransformerLM(nn.Module):
         tie_word_embeddings = config.tie_word_embeddings
 
         self.embed = nn.Embedding(vocab_size, self.hidden_dim)
+        self.embed_dropout = nn.Dropout(getattr(config, 'dropout', 0.0))
 
         self.blocks = nn.ModuleList([
             TransformerBlock(
@@ -45,7 +46,8 @@ class TransformerLM(nn.Module):
                 activation_type=config.activation_type,
                 qk_norm=config.qk_norm,
                 use_rope=config.use_rope,
-                ffn_dim=config.ffn_dim
+                ffn_dim=config.ffn_dim,
+                dropout=getattr(config, 'dropout', 0.0)
             )
             for _ in range(num_layers)
         ])
@@ -92,6 +94,7 @@ class TransformerLM(nn.Module):
         """
         b, s = x.shape
         x = self.embed(x)
+        x = self.embed_dropout(x)
 
         # Dynamic RoPE Cache
         cos, sin = build_rope_cache(s, self.blocks[0].attn.head_dim, device=x.device)

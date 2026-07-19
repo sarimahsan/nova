@@ -18,7 +18,7 @@ def repeat_kv(x, n_rep):
     return x
 
 class GroupedQueryAttention(nn.Module):
-    def __init__(self, hidden_dim, num_heads, num_kv_heads, qk_norm=True, use_rope=True):
+    def __init__(self, hidden_dim, num_heads, num_kv_heads, qk_norm=True, use_rope=True, dropout=0.0):
         super().__init__()
         assert num_heads % num_kv_heads == 0, f"num_heads ({num_heads}) must be divisible by num_kv_heads ({num_kv_heads})"
         self.hidden_dim = hidden_dim
@@ -26,6 +26,7 @@ class GroupedQueryAttention(nn.Module):
         self.num_kv_heads = num_kv_heads
         self.head_dim = hidden_dim // num_heads
         self.n_rep = num_heads // num_kv_heads
+        self.dropout = dropout
 
         self.q_proj = nn.Linear(hidden_dim, num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(hidden_dim, num_kv_heads * self.head_dim, bias=False)
@@ -40,6 +41,7 @@ class GroupedQueryAttention(nn.Module):
             self.k_norm = RMSNorm(self.head_dim)
 
         self.out_proj = nn.Linear(hidden_dim, hidden_dim, bias=False)
+        self.resid_dropout = nn.Dropout(dropout)
         
         # Attribute to track entropy for logging callbacks
         self.last_attn_entropy = 0.0
@@ -73,12 +75,13 @@ class GroupedQueryAttention(nn.Module):
         self.last_attn_entropy = 0.0
 
         # PyTorch native optimized causal SDPA
+        # dropout_p is only applied during training by SDPA internally
         out = F.scaled_dot_product_attention(
             q, k_rep, v_rep,
             attn_mask=None,
-            dropout_p=0.0,
+            dropout_p=self.dropout if self.training else 0.0,
             is_causal=True
         )
 
         out = out.transpose(1, 2).contiguous().view(b, s, self.hidden_dim)
-        return self.out_proj(out)
+        return self.resid_dropout(self.out_proj(out))

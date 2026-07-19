@@ -11,11 +11,11 @@ norm_type: rmsnorm
 activation_type: swiglu
 qk_norm: true
 use_rope: true
-dropout: 0.0
+dropout: 0.1
 
 # Training
-lr: 1.5e-4
-min_lr: 1.5e-5
+lr: 1e-4
+min_lr: 1e-5
 weight_decay: 0.1
 warmup_steps: 1000
 batch_size: 16
