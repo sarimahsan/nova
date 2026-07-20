@@ -175,9 +175,9 @@ def main():
     # Save to Safetensors format
     raw_model = model.module if hasattr(model, "module") else model
     try:
-        from safetensors.torch import save_file
+        from safetensors.torch import save_model
         safetensors_path = os.path.join(hf_model_dir, "model.safetensors")
-        save_file(raw_model.state_dict(), safetensors_path)
+        save_model(raw_model, safetensors_path)
         print(f"Saved model weights to Safetensors format at: '{safetensors_path}'")
     except ImportError:
         print("safetensors package is not installed. Saving standard PyTorch model.bin instead...")
