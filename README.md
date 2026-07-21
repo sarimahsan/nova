@@ -13,33 +13,106 @@ A complete, self-contained implementation of a modern transformer language model
 
 ## 📊 Model Architecture Diagram
 
+This repository implements the **Nova** architecture, a modern decoder-only transformer. Below are the visual diagrams of the global architecture pipeline and the inner details of each Transformer block.
+
+### 1. Global Model Pipeline
+
 ```mermaid
 graph TD
-    Input[Token IDs: Batch, Seq] --> Embed[Embedding Layer]
-    Embed --> Block1[Transformer Block 1]
+    %% Custom Styling
+    classDef default fill:#1e1e2e,stroke:#cdd6f4,stroke-width:1px,color:#cdd6f4;
+    classDef input fill:#f9e2af,stroke:#fab387,stroke-width:2px,color:#11111b;
+    classDef block fill:#313244,stroke:#bac2de,stroke-dasharray: 5 5,color:#cdd6f4;
+    classDef attention fill:#a6e3a1,stroke:#94e2d5,stroke-width:2px,color:#11111b;
+    classDef ffn fill:#b4befe,stroke:#cba6f7,stroke-width:2px,color:#11111b;
+    classDef layer fill:#45475a,stroke:#585b70,stroke-width:1px,color:#cdd6f4;
+    classDef output fill:#f38ba8,stroke:#eba0ac,stroke-width:2px,color:#11111b;
+
+    %% Nodes
+    Input[Token IDs<br>Batch, Seq]:::input --> Embed[Embedding Layer<br>Vocab Size -> Hidden Dim]:::layer
+    Embed --> Drop[Embedding Dropout]:::layer
+    Drop --> Block1[Transformer Block 1]:::block
+    Block1 --> BlockDots[ ... ]
+    BlockDots --> BlockN[Transformer Block N]:::block
     
-    subgraph Block ["Transformer Block Layer (Pre-Norm)"]
+    %% Dynamic RoPE Cache
+    RoPECache[Dynamic RoPE Cache<br>cos, sin]:::layer -.-> |Used by GQA| Block1
+    RoPECache -.-> |Used by GQA| BlockN
+    
+    BlockN --> FinalNorm[Final Norm<br>RMSNorm / LayerNorm]:::layer
+    FinalNorm --> LMHead[LM Head<br>Linear: Hidden Dim -> Vocab]:::layer
+    LMHead --> Logits[Logits<br>Batch, Seq, Vocab]:::output
+    
+    %% Tied Weights Link
+    Embed -.->|Shared Weight Tying| LMHead
+```
+
+### 2. Transformer Block Internals (Pre-Norm)
+
+```mermaid
+graph TB
+    %% Custom Styling
+    classDef default fill:#1e1e2e,stroke:#cdd6f4,color:#cdd6f4;
+    classDef residual fill:#f5c2e7,stroke:#cba6f7,stroke-width:2px,color:#11111b;
+    classDef norm fill:#89b4fa,stroke:#74c7ec,stroke-width:1px,color:#11111b;
+    classDef proj fill:#fab387,stroke:#f9e2af,stroke-width:1px,color:#11111b;
+    classDef op fill:#94e2d5,stroke:#a6e3a1,stroke-width:1px,color:#11111b;
+    classDef routing fill:#b4befe,stroke:#89b4fa,stroke-width:1px,color:#11111b;
+
+    B_In[Input Hidden States]:::default
+    
+    %% Attention Branch
+    B_In --> B_AttnNorm[Norm Layer<br>RMSNorm / LayerNorm]:::norm
+    
+    subgraph GQA ["Grouped Query Attention (GQA) Sub-block"]
         direction TB
-        B_In[Input Hidden States] --> B_RMS1[RMSNorm]
-        B_RMS1 --> B_GQA[Grouped Query Attention]
-        B_GQA --> B_Add1[Residual Connection +]
-        B_In --> B_Add1
+        B_AttnNorm --> Q_Proj[Query Projection<br>num_heads * head_dim]:::proj
+        B_AttnNorm --> K_Proj[Key Projection<br>num_kv_heads * head_dim]:::proj
+        B_AttnNorm --> V_Proj[Value Projection<br>num_kv_heads * head_dim]:::proj
         
-        B_Add1 --> B_RMS2[RMSNorm]
-        B_RMS2 --> B_FFN[SwiGLU FFN]
-        B_FFN --> B_Add2[Residual Connection +]
-        B_Add1 --> B_Add2
-        B_Add2 --> B_Out[Output Hidden States]
+        Q_Proj --> Q_Norm[Q Norm<br>RMSNorm]:::norm
+        K_Proj --> K_Norm[K Norm<br>RMSNorm]:::norm
+        
+        Q_Norm --> Q_RoPE[Apply RoPE<br>Rotary Embeddings]:::op
+        K_Norm --> K_RoPE[Apply RoPE<br>Rotary Embeddings]:::op
+        
+        K_RoPE --> K_Rep[Repeat KV<br>n_rep = num_heads / num_kv_heads]:::op
+        V_Proj --> V_Rep[Repeat KV<br>n_rep = num_heads / num_kv_heads]:::op
+        
+        Q_RoPE --> SDPA[Scaled Dot Product Attention<br>Causal Masking & Dropout]:::op
+        K_Rep --> SDPA
+        V_Rep --> SDPA
+        
+        SDPA --> Attn_OutProj[Out Projection<br>Linear]:::proj
+        Attn_OutProj --> Attn_Drop[Residual Dropout]:::op
     end
     
-    Block1 --> BlockN[Transformer Block N]
-    BlockN --> FinalNorm[Final RMSNorm]
-    FinalNorm --> LMHead[LM Head]
-    LMHead --> Output[Logits: Batch, Seq, Vocab]
+    %% Residual Connection 1
+    B_In --> B_Add1((+)):::residual
+    Attn_Drop --> B_Add1
     
-    style Block fill:#f9f9f9,stroke:#333,stroke-width:1px
-    style B_GQA fill:#d1e7dd,stroke:#0f5132,stroke-width:1px
-    style B_FFN fill:#fff3cd,stroke:#664d03,stroke-width:1px
+    %% FFN Branch
+    B_Add1 --> B_FFNNorm[Norm Layer<br>RMSNorm / LayerNorm]:::norm
+    
+    subgraph FFN ["Feed-Forward Network (Gated / SwiGLU Default)"]
+        direction TB
+        B_FFNNorm --> Gate_Proj[Gate Proj<br>w_gate]:::proj
+        B_FFNNorm --> Up_Proj[Up Proj<br>w_up]:::proj
+        
+        Gate_Proj --> Act[Activation<br>SiLU / GELU / ReLU²]:::op
+        
+        Act --> Mul[Element-wise Product<br>act(gate) * up]:::op
+        Up_Proj --> Mul
+        
+        Mul --> FFN_Drop[FFN Dropout]:::op
+        FFN_Drop --> Down_Proj[Down Proj<br>w_down]:::proj
+    end
+    
+    %% Residual Connection 2
+    B_Add1 --> B_Add2((+)):::residual
+    Down_Proj --> B_Add2
+    
+    B_Add2 --> B_Out[Output Hidden States]:::default
 ```
 
 ---
