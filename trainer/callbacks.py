@@ -43,7 +43,7 @@ class LoggerCallback(Callback):
                 writer = csv.writer(f)
                 writer.writerow([
                     "epoch", "step", "train_loss", "val_loss", "perplexity",
-                    "learning_rate", "tokens_per_second", "gpu_memory_mb", "elapsed_time"
+                    "learning_rate", "grad_norm", "param_norm", "tokens_per_second", "gpu_memory_mb", "elapsed_time"
                 ])
 
     def on_step_start(self, trainer):
@@ -63,6 +63,12 @@ class LoggerCallback(Callback):
             # Current LR
             lr = trainer.get_current_lr()
             
+            # Grad Norm
+            grad_norm = getattr(trainer, "last_grad_norm", 0.0)
+            
+            # Param Norm
+            param_norm = getattr(trainer, "last_param_norm", 0.0)
+            
             # Perplexity
             perplexity = math.exp(min(loss_val, 100))
             
@@ -71,7 +77,8 @@ class LoggerCallback(Callback):
             # Log to stdout
             print(
                 f"Epoch {trainer.epoch} | Step {trainer.global_step} | "
-                f"Loss {loss_val:.4f} | PPL {perplexity:.2f} | LR {lr:.2e} | "
+                f"Loss {loss_val:.4f} | PPL {perplexity:.2f} | "
+                f"Grad Norm {grad_norm:.4f} | Param Norm {param_norm:.4f} | LR {lr:.2e} | "
                 f"Tokens/s {tokens_per_sec:.1f} | GPU Mem {gpu_mem:.1f}MB"
             )
 
@@ -83,6 +90,8 @@ class LoggerCallback(Callback):
                 "val_loss": getattr(trainer, "last_val_loss", None),
                 "perplexity": perplexity,
                 "learning_rate": lr,
+                "grad_norm": grad_norm,
+                "param_norm": param_norm,
                 "tokens_per_second": tokens_per_sec,
                 "gpu_memory_mb": gpu_mem,
                 "elapsed_time": elapsed
@@ -96,6 +105,7 @@ class LoggerCallback(Callback):
                     metrics["epoch"], metrics["step"], f"{metrics['train_loss']:.6f}",
                     f"{metrics['val_loss']:.6f}" if metrics["val_loss"] is not None else "",
                     f"{metrics['perplexity']:.4f}", f"{metrics['learning_rate']:.2e}",
+                    f"{metrics['grad_norm']:.6f}", f"{metrics['param_norm']:.6f}",
                     f"{metrics['tokens_per_second']:.2f}", f"{metrics['gpu_memory_mb']:.2f}",
                     f"{metrics['elapsed_time']:.2f}"
                 ])

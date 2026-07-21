@@ -39,7 +39,7 @@ class Trainer:
         self.val_interval = getattr(config, "val_interval", 500)
 
         # Total training steps (optimizer updates)
-        self.total_steps = (len(self.train_loader) // self.grad_accum) * self.epochs
+        self.total_steps = math.ceil(len(self.train_loader) / self.grad_accum) * self.epochs
 
         # Move model to device
         self.model.to(self.device)
@@ -102,15 +102,18 @@ class Trainer:
                 # Track cumulative tokens seen
                 self.total_tokens_seen += x.shape[0] * x.shape[1]
 
-                # Initialize gradients and run step_start callbacks
+                # Initialize gradients, step-level metrics, update LR, and run callbacks
                 if step % self.grad_accum == 0:
-                    self.optimizer.zero_grad()
+                    self.optimizer.zero_grad(set_to_none=True)
+                    self.step_loss_accumulator = 0.0
+                    self.step_microbatch_count = 0
+                    
+                    # Update scheduler learning rate once per optimizer update
+                    current_lr = self.get_current_lr()
+                    self.set_lr(current_lr)
+                    
                     for callback in self.callbacks:
                         callback.on_step_start(self)
-
-                # Update scheduler learning rate
-                current_lr = self.get_current_lr()
-                self.set_lr(current_lr)
 
                 # Determine dynamic autocast precision
                 amp_dtype = torch.float32
@@ -125,7 +128,11 @@ class Trainer:
                 with torch.amp.autocast(device_type=self.device_type, dtype=amp_dtype, enabled=amp_enabled):
                     logits = self.model(x)
                     B, T, V = logits.shape
-                    loss = criterion(logits.view(B * T, V), y.view(B * T)) / self.grad_accum
+                    raw_loss = criterion(logits.reshape(-1, V), y.reshape(-1))
+                    loss = raw_loss / self.grad_accum
+
+                self.step_loss_accumulator += raw_loss.item()
+                self.step_microbatch_count += 1
 
                 # Backward pass
                 if self.device_type == "cuda" and self.precision == "fp16":
@@ -137,15 +144,25 @@ class Trainer:
                 if (step + 1) % self.grad_accum == 0 or (step + 1) == len(self.train_loader):
                     if self.device_type == "cuda" and self.precision == "fp16":
                         self.scaler.unscale_(self.optimizer)
-                        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.clip_grad)
+                        grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.clip_grad)
+                        self.last_grad_norm = grad_norm.item() if hasattr(grad_norm, "item") else float(grad_norm)
                         self.scaler.step(self.optimizer)
                         self.scaler.update()
                     else:
-                        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.clip_grad)
+                        grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.clip_grad)
+                        self.last_grad_norm = grad_norm.item() if hasattr(grad_norm, "item") else float(grad_norm)
                         self.optimizer.step()
 
                     self.global_step += 1
-                    loss_val = loss.item() * self.grad_accum
+                    loss_val = self.step_loss_accumulator / self.step_microbatch_count
+                    
+                    # Calculate parameter L2 norm
+                    with torch.no_grad():
+                        param_norm_sq = 0.0
+                        for p in self.model.parameters():
+                            if p.requires_grad:
+                                param_norm_sq += p.norm().item() ** 2
+                        self.last_param_norm = math.sqrt(param_norm_sq)
 
                     # Validation
                     if self.global_step % self.val_interval == 0 or self.global_step == self.total_steps:
@@ -206,7 +223,7 @@ class Trainer:
             with torch.amp.autocast(device_type=self.device_type, dtype=amp_dtype, enabled=amp_enabled):
                 val_logits = self.model(val_x)
                 B_v, T_v, V_v = val_logits.shape
-                v_loss = criterion(val_logits.view(B_v * T_v, V_v), val_y.view(B_v * T_v))
+                v_loss = criterion(val_logits.reshape(-1, V_v), val_y.reshape(-1))
 
             val_loss += v_loss.item()
 
