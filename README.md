@@ -29,19 +29,19 @@ graph TD
     classDef output fill:#f38ba8,stroke:#eba0ac,stroke-width:2px,color:#11111b;
 
     %% Nodes
-    Input[Token IDs<br>Batch, Seq]:::input --> Embed[Embedding Layer<br>Vocab Size -> Hidden Dim]:::layer
-    Embed --> Drop[Embedding Dropout]:::layer
-    Drop --> Block1[Transformer Block 1]:::block
+    Input["Token IDs<br>Batch, Seq"]:::input --> Embed["Embedding Layer<br>Vocab Size -> Hidden Dim"]:::layer
+    Embed --> Drop["Embedding Dropout"]:::layer
+    Drop --> Block1["Transformer Block 1"]:::block
     Block1 --> BlockDots[ ... ]
-    BlockDots --> BlockN[Transformer Block N]:::block
+    BlockDots --> BlockN["Transformer Block N"]:::block
     
     %% Dynamic RoPE Cache
-    RoPECache[Dynamic RoPE Cache<br>cos, sin]:::layer -.-> |Used by GQA| Block1
+    RoPECache["Dynamic RoPE Cache<br>cos, sin"]:::layer -.-> |Used by GQA| Block1
     RoPECache -.-> |Used by GQA| BlockN
     
-    BlockN --> FinalNorm[Final Norm<br>RMSNorm / LayerNorm]:::layer
-    FinalNorm --> LMHead[LM Head<br>Linear: Hidden Dim -> Vocab]:::layer
-    LMHead --> Logits[Logits<br>Batch, Seq, Vocab]:::output
+    BlockN --> FinalNorm["Final Norm<br>RMSNorm / LayerNorm"]:::layer
+    FinalNorm --> LMHead["LM Head<br>Linear: Hidden Dim -> Vocab"]:::layer
+    LMHead --> Logits["Logits<br>Batch, Seq, Vocab"]:::output
     
     %% Tied Weights Link
     Embed -.->|Shared Weight Tying| LMHead
@@ -62,29 +62,29 @@ graph TB
     B_In[Input Hidden States]:::default
     
     %% Attention Branch
-    B_In --> B_AttnNorm[Norm Layer<br>RMSNorm / LayerNorm]:::norm
+    B_In --> B_AttnNorm["Norm Layer<br>RMSNorm / LayerNorm"]:::norm
     
     subgraph GQA ["Grouped Query Attention (GQA) Sub-block"]
         direction TB
-        B_AttnNorm --> Q_Proj[Query Projection<br>num_heads * head_dim]:::proj
-        B_AttnNorm --> K_Proj[Key Projection<br>num_kv_heads * head_dim]:::proj
-        B_AttnNorm --> V_Proj[Value Projection<br>num_kv_heads * head_dim]:::proj
+        B_AttnNorm --> Q_Proj["Query Projection<br>num_heads * head_dim"]:::proj
+        B_AttnNorm --> K_Proj["Key Projection<br>num_kv_heads * head_dim"]:::proj
+        B_AttnNorm --> V_Proj["Value Projection<br>num_kv_heads * head_dim"]:::proj
         
-        Q_Proj --> Q_Norm[Q Norm<br>RMSNorm]:::norm
-        K_Proj --> K_Norm[K Norm<br>RMSNorm]:::norm
+        Q_Proj --> Q_Norm["Q Norm<br>RMSNorm"]:::norm
+        K_Proj --> K_Norm["K Norm<br>RMSNorm"]:::norm
         
-        Q_Norm --> Q_RoPE[Apply RoPE<br>Rotary Embeddings]:::op
-        K_Norm --> K_RoPE[Apply RoPE<br>Rotary Embeddings]:::op
+        Q_Norm --> Q_RoPE["Apply RoPE<br>Rotary Embeddings"]:::op
+        K_Norm --> K_RoPE["Apply RoPE<br>Rotary Embeddings"]:::op
         
-        K_RoPE --> K_Rep[Repeat KV<br>n_rep = num_heads / num_kv_heads]:::op
-        V_Proj --> V_Rep[Repeat KV<br>n_rep = num_heads / num_kv_heads]:::op
+        K_RoPE --> K_Rep["Repeat KV<br>n_rep = num_heads / num_kv_heads"]:::op
+        V_Proj --> V_Rep["Repeat KV<br>n_rep = num_heads / num_kv_heads"]:::op
         
-        Q_RoPE --> SDPA[Scaled Dot Product Attention<br>Causal Masking & Dropout]:::op
+        Q_RoPE --> SDPA["Scaled Dot Product Attention<br>Causal Masking & Dropout"]:::op
         K_Rep --> SDPA
         V_Rep --> SDPA
         
-        SDPA --> Attn_OutProj[Out Projection<br>Linear]:::proj
-        Attn_OutProj --> Attn_Drop[Residual Dropout]:::op
+        SDPA --> Attn_OutProj["Out Projection<br>Linear"]:::proj
+        Attn_OutProj --> Attn_Drop["Residual Dropout"]:::op
     end
     
     %% Residual Connection 1
@@ -92,20 +92,20 @@ graph TB
     Attn_Drop --> B_Add1
     
     %% FFN Branch
-    B_Add1 --> B_FFNNorm[Norm Layer<br>RMSNorm / LayerNorm]:::norm
+    B_Add1 --> B_FFNNorm["Norm Layer<br>RMSNorm / LayerNorm"]:::norm
     
     subgraph FFN ["Feed-Forward Network (Gated / SwiGLU Default)"]
         direction TB
-        B_FFNNorm --> Gate_Proj[Gate Proj<br>w_gate]:::proj
-        B_FFNNorm --> Up_Proj[Up Proj<br>w_up]:::proj
+        B_FFNNorm --> Gate_Proj["Gate Proj<br>w_gate"]:::proj
+        B_FFNNorm --> Up_Proj["Up Proj<br>w_up"]:::proj
         
-        Gate_Proj --> Act[Activation<br>SiLU / GELU / ReLU²]:::op
+        Gate_Proj --> Act["Activation<br>SiLU / GELU / ReLU²"]:::op
         
-        Act --> Mul[Element-wise Product<br>act(gate) * up]:::op
+        Act --> Mul["Element-wise Product<br>act(gate) * up"]:::op
         Up_Proj --> Mul
         
-        Mul --> FFN_Drop[FFN Dropout]:::op
-        FFN_Drop --> Down_Proj[Down Proj<br>w_down]:::proj
+        Mul --> FFN_Drop["FFN Dropout"]:::op
+        FFN_Drop --> Down_Proj["Down Proj<br>w_down"]:::proj
     end
     
     %% Residual Connection 2
