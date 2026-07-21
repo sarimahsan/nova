@@ -12,11 +12,10 @@ class RMSNorm(nn.Module):
 
     def forward(self, x):
         # x: (..., dim)
-        # Compute mean square along the last dimension in float32 for numerical stability
-        x_fp32 = x.float()
-        norm = x_fp32.pow(2).mean(dim=-1, keepdim=True)
-        x_normed = x_fp32 * torch.rsqrt(norm + self.eps)
-        return self.weight * x_normed.type_as(x)
+        # Compute variance in float32 for numerical stability, but apply the scaling
+        # in the input's native precision to save activation memory during backprop
+        norm = x.float().pow(2).mean(dim=-1, keepdim=True)
+        return self.weight * (x * torch.rsqrt(norm + self.eps).type_as(x))
 
 class LayerNorm(nn.Module):
     """
