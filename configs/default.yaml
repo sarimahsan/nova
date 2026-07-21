@@ -46,7 +46,7 @@ dataset_config: null
 
 tokenizer_name: gpt2
 
-max_samples: 500000
+max_samples: 100000
 val_max_samples: 5000
 
 # ============================
