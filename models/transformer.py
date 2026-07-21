@@ -92,24 +92,36 @@ class TransformerLM(nn.Module):
         """
         x: (batch, seq)
         """
-        b, s = x.shape
-        x = self.embed(x)
-        x = self.embed_dropout(x)
+        # Determine dynamic autocast precision
+        precision = getattr(self.config, "precision", "fp32")
+        amp_dtype = torch.float32
+        if precision == "fp16":
+            amp_dtype = torch.float16
+        elif precision == "bf16":
+            amp_dtype = torch.bfloat16
+            
+        device_type = "cuda" if x.is_cuda else "cpu"
+        amp_enabled = (precision in ["fp16", "bf16"] and device_type == "cuda")
 
-        # Dynamic RoPE Cache
-        cos, sin = build_rope_cache(s, self.blocks[0].attn.head_dim, device=x.device)
+        with torch.amp.autocast(device_type=device_type, dtype=amp_dtype, enabled=amp_enabled):
+            b, s = x.shape
+            x = self.embed(x)
+            x = self.embed_dropout(x)
 
-        # Blocks forward pass
-        cosine_sims = []
-        for block in self.blocks:
-            h_next = block(x, cos, sin)
-            with torch.no_grad():
-                cos_val = F.cosine_similarity(x, h_next, dim=-1).mean().item()
-                cosine_sims.append(cos_val)
-            x = h_next
-        self.last_cosine_similarities = cosine_sims
+            # Dynamic RoPE Cache
+            cos, sin = build_rope_cache(s, self.blocks[0].attn.head_dim, device=x.device)
 
-        x = self.norm(x)
-        logits = self.lm_head(x)
+            # Blocks forward pass
+            cosine_sims = []
+            for block in self.blocks:
+                h_next = block(x, cos, sin)
+                with torch.no_grad():
+                    cos_val = F.cosine_similarity(x, h_next, dim=-1).mean().item()
+                    cosine_sims.append(cos_val)
+                x = h_next
+            self.last_cosine_similarities = cosine_sims
 
-        return logits
+            x = self.norm(x)
+            logits = self.lm_head(x)
+
+            return logits
