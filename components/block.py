@@ -31,7 +31,7 @@ class TransformerBlock(nn.Module):
         self.last_rms_ffn_in = 0.0
         self.last_rms_ffn_out = 0.0
 
-    def forward(self, x, cos, sin):
+    def forward(self, x, cos, sin, past_kv=None, use_cache=False):
         # x: (batch, seq, hidden_dim)
         
         # Calculate RMS before attention norm
@@ -46,7 +46,12 @@ class TransformerBlock(nn.Module):
         with torch.no_grad():
             self.last_rms_attn_out = torch.sqrt(x_normed.pow(2).mean()).item()
             
-        attn_out = self.attn(x_normed, cos, sin)
+        if use_cache:
+            attn_out, new_kv = self.attn(x_normed, cos, sin, past_kv=past_kv, use_cache=True)
+        else:
+            attn_out = self.attn(x_normed, cos, sin, past_kv=past_kv, use_cache=False)
+            new_kv = None
+            
         x = residual + attn_out
 
         # Calculate RMS before FFN norm
@@ -64,4 +69,6 @@ class TransformerBlock(nn.Module):
         ffn_out = self.ffn(x_normed)
         x = residual + ffn_out
 
+        if use_cache:
+            return x, new_kv
         return x

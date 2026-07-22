@@ -88,7 +88,7 @@ class TransformerLM(nn.Module):
                     if hasattr(module, "bias") and module.bias is not None:
                         nn.init.zeros_(module.bias)
 
-    def forward(self, x):
+    def forward(self, x, past_key_values=None, start_pos=0, use_cache=False):
         """
         x: (batch, seq)
         """
@@ -108,20 +108,33 @@ class TransformerLM(nn.Module):
             x = self.embed(x)
             x = self.embed_dropout(x)
 
-            # Dynamic RoPE Cache
-            cos, sin = build_rope_cache(s, self.blocks[0].attn.head_dim, device=x.device)
+            # Dynamic RoPE Cache starting from start_pos
+            cos_full, sin_full = build_rope_cache(start_pos + s, self.blocks[0].attn.head_dim, device=x.device)
+            cos = cos_full[start_pos : start_pos + s]
+            sin = sin_full[start_pos : start_pos + s]
 
             # Blocks forward pass
             cosine_sims = []
-            for block in self.blocks:
-                h_next = block(x, cos, sin)
+            new_past_key_values = [] if use_cache else None
+
+            for i, block in enumerate(self.blocks):
+                layer_past = past_key_values[i] if past_key_values is not None else None
+                if use_cache:
+                    h_next, layer_kv = block(x, cos, sin, past_kv=layer_past, use_cache=True)
+                    new_past_key_values.append(layer_kv)
+                else:
+                    h_next = block(x, cos, sin, past_kv=layer_past, use_cache=False)
+
                 with torch.no_grad():
                     cos_val = F.cosine_similarity(x, h_next, dim=-1).mean().item()
                     cosine_sims.append(cos_val)
                 x = h_next
+
             self.last_cosine_similarities = cosine_sims
 
             x = self.norm(x)
             logits = self.lm_head(x)
 
+            if use_cache:
+                return logits, new_past_key_values
             return logits

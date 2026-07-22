@@ -46,7 +46,7 @@ class GroupedQueryAttention(nn.Module):
         # Attribute to track entropy for logging callbacks
         self.last_attn_entropy = 0.0
 
-    def forward(self, x, cos, sin):
+    def forward(self, x, cos, sin, past_kv=None, use_cache=False):
         b, s, _ = x.shape
         q = self.q_proj(x)
         k = self.k_proj(x)
@@ -67,6 +67,14 @@ class GroupedQueryAttention(nn.Module):
             q = apply_rope(q, cos, sin)
             k = apply_rope(k, cos, sin)
 
+        # Concatenate cached KV if provided
+        if past_kv is not None:
+            pk, pv = past_kv
+            k = torch.cat([pk, k], dim=2)
+            v = torch.cat([pv, v], dim=2)
+
+        new_kv = (k, v) if use_cache else None
+
         # Repeat KV for GQA
         k_rep = repeat_kv(k, self.n_rep)
         v_rep = repeat_kv(v, self.n_rep)
@@ -76,12 +84,18 @@ class GroupedQueryAttention(nn.Module):
 
         # PyTorch native optimized causal SDPA
         # dropout_p is only applied during training by SDPA internally
+        is_causal = (s > 1) and (past_kv is None)
+
         out = F.scaled_dot_product_attention(
             q, k_rep, v_rep,
             attn_mask=None,
             dropout_p=self.dropout if self.training else 0.0,
-            is_causal=True
+            is_causal=is_causal
         )
 
         out = out.transpose(1, 2).contiguous().view(b, s, self.hidden_dim)
-        return self.resid_dropout(self.out_proj(out))
+        out = self.resid_dropout(self.out_proj(out))
+
+        if use_cache:
+            return out, new_kv
+        return out

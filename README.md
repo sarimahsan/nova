@@ -117,6 +117,12 @@ graph TB
 
 ---
 
+## 🤗 Hugging Face Model
+
+The trained weights and model card for **Nova 141M** are published on Hugging Face:  
+👉 **[sarimahsan/nova-141m-tinystories](https://huggingface.co/sarimahsan/nova-141m-tinystories)**
+
+
 ## 📂 Project Structure
 
 ```
@@ -152,7 +158,7 @@ graph TB
 
 ```bash
 # Clone the repository
-git clone https://github.com/<your-username>/nova.git
+git clone https://github.com/sarimahsan/nova.git
 cd nova
 
 # Install dependencies
@@ -183,8 +189,8 @@ python train.py --config configs/default.yaml --output_dir test_output --quick_t
 Under Kaggle notebook environment with **2×T4 GPUs** accelerator option enabled, execute the following commands in a code cell:
 
 ```bash
-# 1. Clone your repository
-!git clone https://github.com/<your-username>/nova.git
+# 1. Clone repository
+!git clone https://github.com/sarimahsan/nova.git
 %cd nova
 
 # 2. Install requirements
@@ -197,10 +203,3 @@ Under Kaggle notebook environment with **2×T4 GPUs** accelerator option enabled
 # 4. Start training on 2×T4 GPUs (DataParallel + bf16 autocast)
 !python train.py --config configs/default.yaml --output_dir /kaggle/working/results
 ```
-
-### Output Artifacts
-Once training finishes, the directory specified in `--output_dir` will contain:
-1. `checkpoint.pt`: Best model weights based on validation loss.
-2. `metrics.csv`: Step-by-step log of training loss, learning rate, GPU memory, perplexity, and throughput.
-3. `history.json`: Log file with history details.
-4. `training_dashboard.png`: Training metrics dashboard containing loss, validation loss, perplexity, and learning rate curves.

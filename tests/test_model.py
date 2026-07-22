@@ -359,3 +359,33 @@ def test_trainer_dataparallel():
         trainer.train()
         assert trainer.global_step > 0
 
+
+def test_kv_cache_equivalence():
+    from utils.config import ModelConfig
+    from models.transformer import TransformerLM
+    config = ModelConfig(vocab_size=100, hidden_dim=32, num_layers=2, num_heads=4, num_kv_heads=2, max_seq_len=16)
+    model = TransformerLM(config)
+    model.eval()
+
+    x = torch.randint(0, 100, (1, 8))
+
+    # Full forward without KV cache
+    with torch.no_grad():
+        full_logits = model(x)
+
+    # Step-by-step forward with KV cache
+    with torch.no_grad():
+        # Prefill prompt (first 5 tokens)
+        prompt_logits, past_kv = model(x[:, :5], use_cache=True, start_pos=0)
+        
+        # Step through remaining tokens one by one
+        curr_kv = past_kv
+        all_step_logits = [prompt_logits]
+        for pos in range(5, 8):
+            step_logits, curr_kv = model(x[:, pos:pos+1], past_key_values=curr_kv, start_pos=pos, use_cache=True)
+            all_step_logits.append(step_logits)
+
+        cached_logits = torch.cat(all_step_logits, dim=1)
+
+    assert torch.allclose(full_logits, cached_logits, atol=1e-5), "KV cached output must match full forward output"
+
