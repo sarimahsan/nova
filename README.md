@@ -120,7 +120,7 @@ graph TB
 ## 🤗 Hugging Face Model
 
 The trained weights and model card for **Nova 141M** are published on Hugging Face:  
-👉 **[sarimahsan/nova-141m-tinystories](https://huggingface.co/sarimahsan/nova-141m-tinystories)**
+👉 **[sarimahsan/nova-141m-tinystories](https://huggingface.co/sarimahsan101/nova-141m-tinystories)**
 
 
 ## 📂 Project Structure
